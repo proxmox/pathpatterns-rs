@@ -214,10 +214,19 @@ impl MatchList {
         Self { list: list.into() }
     }
 
+    /// Create a new empty list with a specified maximum capacity.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            list: Vec::with_capacity(capacity)
+        }
+    }
+
+    /// Add another entry.
     pub fn push(&mut self, entry: MatchEntry) {
         self.list.push(entry)
     }
 
+    /// Remove the list entry.
     pub fn pop(&mut self) -> Option<MatchEntry> {
         self.list.pop()
     }
@@ -226,6 +235,12 @@ impl MatchList {
 impl From<Vec<MatchEntry>> for MatchList {
     fn from(list: Vec<MatchEntry>) -> Self {
         Self { list }
+    }
+}
+
+impl Into<Vec<MatchEntry>> for MatchList {
+    fn into(self) -> Vec<MatchEntry> {
+        self.list
     }
 }
 
