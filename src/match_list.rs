@@ -2,6 +2,8 @@
 
 use bitflags::bitflags;
 
+use crate::PatternFlag;
+
 #[rustfmt::skip]
 bitflags! {
     /// These flags influence what kind of paths should be matched.
@@ -74,6 +76,17 @@ impl MatchType {
     }
 }
 
+impl std::ops::Not for MatchType {
+    type Output = MatchType;
+
+    fn not(self) -> Self::Output {
+        match self {
+            MatchType::Include => MatchType::Exclude,
+            MatchType::Exclude => MatchType::Include,
+        }
+    }
+}
+
 /// A single entry in a `MatchList`.
 #[derive(Clone, Debug)]
 pub struct MatchEntry {
@@ -84,22 +97,76 @@ pub struct MatchEntry {
 
 impl MatchEntry {
     /// Create a new match entry.
-    pub fn new<T: Into<MatchPattern>>(pattern: T, ty: MatchType, flags: MatchFlag) -> Self {
+    pub fn new<T: Into<MatchPattern>>(pattern: T, ty: MatchType) -> Self {
         Self {
             pattern: pattern.into(),
             ty,
-            flags,
+            flags: MatchFlag::default(),
         }
     }
 
     /// Create a new include-type match entry with default flags.
     pub fn include<T: Into<MatchPattern>>(pattern: T) -> Self {
-        Self::new(pattern.into(), MatchType::Include, MatchFlag::default())
+        Self::new(pattern.into(), MatchType::Include)
     }
 
     /// Create a new exclude-type match entry with default flags.
     pub fn exclude<T: Into<MatchPattern>>(pattern: T) -> Self {
-        Self::new(pattern.into(), MatchType::Exclude, MatchFlag::default())
+        Self::new(pattern.into(), MatchType::Exclude)
+    }
+
+    /// Builder method to set the match flags to a specific value.
+    pub fn flags(mut self, flags: MatchFlag) -> Self {
+        self.flags = flags;
+        self
+    }
+
+    /// Builder method to add flag bits to the already present ones.
+    pub fn add_flags(mut self, flags: MatchFlag) -> Self {
+        self.flags.insert(flags);
+        self
+    }
+
+    /// Builder method to remove match flag bits.
+    pub fn remove_flags(mut self, flags: MatchFlag) -> Self {
+        self.flags.remove(flags);
+        self
+    }
+
+    /// Builder method to toggle flag bits.
+    pub fn toggle_flags(mut self, flags: MatchFlag) -> Self {
+        self.flags.toggle(flags);
+        self
+    }
+
+    /// Parse a pattern into a `MatchEntry` while interpreting a leading exclamation mark as
+    /// inversion and trailing slashes to match only directories.
+    pub fn parse_pattern<T: AsRef<[u8]>>(
+        pattern: T,
+        pattern_flags: PatternFlag,
+        ty: MatchType,
+    ) -> Result<Self, crate::ParseError> {
+        Self::parse_pattern_do(pattern.as_ref(), pattern_flags, ty)
+    }
+
+    fn parse_pattern_do(
+        pattern: &[u8],
+        pattern_flags: PatternFlag,
+        ty: MatchType,
+    ) -> Result<Self, crate::ParseError> {
+        let (pattern, ty) = if pattern.get(0).copied() == Some(b'!') {
+            (&pattern[1..], !ty)
+        } else {
+            (pattern, ty)
+        };
+
+        let (pattern, flags) = match pattern.iter().rposition(|&b| b != b'/') {
+            Some(pos) if (pos + 1) == pattern.len() => (pattern, MatchFlag::default()),
+            Some(pos) => (&pattern[..=pos], MatchFlag::MATCH_DIRECTORIES),
+            None => (b"/".as_ref(), MatchFlag::MATCH_DIRECTORIES),
+        };
+
+        Ok(Self::new(crate::Pattern::new(pattern, pattern_flags)?, ty).flags(flags))
     }
 
     #[inline]
@@ -217,7 +284,7 @@ impl MatchList {
     /// Create a new empty list with a specified maximum capacity.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            list: Vec::with_capacity(capacity)
+            list: Vec::with_capacity(capacity),
         }
     }
 
@@ -305,4 +372,69 @@ impl MatchListRef {
 
         None
     }
+}
+
+#[test]
+fn test_file_type_matches() {
+    let matchlist = MatchList::new(
+        [
+            MatchEntry::parse_pattern("a_dir/", PatternFlag::PATH_NAME, MatchType::Include)
+                .unwrap(),
+            MatchEntry::parse_pattern("!a_file", PatternFlag::PATH_NAME, MatchType::Include)
+                .unwrap()
+                .flags(MatchFlag::MATCH_REGULAR_FILES),
+            MatchEntry::parse_pattern("!another_dir//", PatternFlag::PATH_NAME, MatchType::Include)
+                .unwrap(),
+        ]
+        .as_ref(),
+    );
+    assert_eq!(
+        matchlist.matches("a_dir", Some(libc::S_IFDIR)),
+        Some(MatchType::Include)
+    );
+    assert_eq!(
+        matchlist.matches("/a_dir", Some(libc::S_IFDIR)),
+        Some(MatchType::Include)
+    );
+    assert_eq!(matchlist.matches("/a_dir", Some(libc::S_IFREG)), None);
+
+    assert_eq!(
+        matchlist.matches("/a_file", Some(libc::S_IFREG)),
+        Some(MatchType::Exclude)
+    );
+    assert_eq!(matchlist.matches("/a_file", Some(libc::S_IFDIR)), None);
+
+    assert_eq!(
+        matchlist.matches("/another_dir", Some(libc::S_IFDIR)),
+        Some(MatchType::Exclude)
+    );
+    assert_eq!(matchlist.matches("/another_dir", Some(libc::S_IFREG)), None);
+}
+
+#[test]
+fn test_anchored_matches() {
+    use crate::Pattern;
+
+    let matchlist = MatchList::new(
+        [
+            MatchEntry::new(Pattern::path("file-a").unwrap(), MatchType::Include),
+            MatchEntry::new(Pattern::path("some/path").unwrap(), MatchType::Include)
+                .flags(MatchFlag::ANCHORED),
+        ]
+        .as_ref(),
+    );
+
+    assert_eq!(matchlist.matches("file-a", None), Some(MatchType::Include));
+    assert_eq!(
+        matchlist.matches("another/file-a", None),
+        Some(MatchType::Include)
+    );
+
+    assert_eq!(matchlist.matches("some", None), None);
+    assert_eq!(matchlist.matches("path", None), None);
+    assert_eq!(
+        matchlist.matches("some/path", None),
+        Some(MatchType::Include)
+    );
+    assert_eq!(matchlist.matches("another/some/path", None), None);
 }

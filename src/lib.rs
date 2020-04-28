@@ -44,7 +44,11 @@
 //! # assert_eq!(list.matches("/things/shop/bananas/curved.bak", None), Some(MatchType::Include));
 //!
 //! // but this will not:
-//! list.push(MatchEntry::new(Pattern::path("curved.bak")?, MatchType::Exclude, MatchFlag::ANCHORED));
+//! list.push(
+//!     MatchEntry::new(Pattern::path("curved.bak")?, MatchType::Exclude)
+//!         .flags(MatchFlag::ANCHORED)
+//! );
+//! // or: list.push
 //! assert_eq!(list.matches("/things/shop/bananas/curved.bak", None), Some(MatchType::Include));
 //! list.pop();
 //!
@@ -81,8 +85,6 @@
 //! assert_eq!(list.matches("/things/shop/bananas/curved.txt", None), Some(MatchType::Include));
 //! assert_eq!(list.matches("/shop/bananas/curved.bak", None), Some(MatchType::Include));
 //! assert_eq!(list.matches("/shop/bananas/other.txt", None), Some(MatchType::Include));
-//!
-//! //
 //! # Ok(())
 //! # }
 //! # test().unwrap()
