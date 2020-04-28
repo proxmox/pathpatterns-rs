@@ -90,6 +90,7 @@ bitflags! {
 /// Error cases which may happen while parsing a pattern.
 #[derive(Clone, Debug)]
 pub enum ParseError {
+    EmptyPattern,
     NulByteError,
     TrailingBackslash,
     UnclosedCharacterClass(usize),
@@ -101,6 +102,7 @@ impl std::error::Error for ParseError {}
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            ParseError::EmptyPattern => write!(f, "empty pattern"),
             ParseError::NulByteError => write!(f, "null-byte in pattern"),
             ParseError::TrailingBackslash => write!(f, "trailing backslash in pattern"),
             ParseError::UnclosedCharacterClass(begin) => write!(
@@ -163,6 +165,16 @@ impl Pattern {
     }
 
     fn new_do(pattern: &[u8], flags: PatternFlag) -> Result<Self, ParseError> {
+        if pattern.is_empty() {
+            return Err(ParseError::EmptyPattern);
+        }
+
+        // strip trailing slashes:
+        let pattern = match pattern.iter().rposition(|&b| b != b'/') {
+            Some(pos) => &pattern[..=pos],
+            None => b"/",
+        };
+
         let c_pattern = std::ffi::CString::new(pattern).map_err(|_| ParseError::NulByteError)?;
 
         let mut components = Vec::<Component>::new();
