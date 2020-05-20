@@ -148,6 +148,21 @@ impl MatchEntry {
         self
     }
 
+    /// Non-Builder method to change the match type.
+    pub fn match_type_mut(&mut self) -> &mut MatchType {
+        &mut self.ty
+    }
+
+    /// Non-Builder method to change the pattern.
+    pub fn pattern_mut(&mut self) -> &mut MatchPattern {
+        &mut self.pattern
+    }
+
+    /// Non-Builder method to change the flags.
+    pub fn flags_mut(&mut self) -> &mut MatchFlag {
+        &mut self.flags
+    }
+
     /// Parse a pattern into a `MatchEntry` while interpreting a leading exclamation mark as
     /// inversion and trailing slashes to match only directories.
     pub fn parse_pattern<T: AsRef<[u8]>>(
