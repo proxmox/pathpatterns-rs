@@ -148,9 +148,19 @@ impl MatchEntry {
         self
     }
 
+    #[inline]
+    pub fn match_type(&self) -> MatchType {
+        self.ty
+    }
+
     /// Non-Builder method to change the match type.
     pub fn match_type_mut(&mut self) -> &mut MatchType {
         &mut self.ty
+    }
+
+    /// Directly access the pattern.
+    pub fn pattern(&self) -> &MatchPattern {
+        &self.pattern
     }
 
     /// Non-Builder method to change the pattern.
@@ -158,8 +168,13 @@ impl MatchEntry {
         &mut self.pattern
     }
 
+    /// Directly access the match flags.
+    pub fn match_flags(&mut self) -> MatchFlag {
+        self.flags
+    }
+
     /// Non-Builder method to change the flags.
-    pub fn flags_mut(&mut self) -> &mut MatchFlag {
+    pub fn match_flags_mut(&mut self) -> &mut MatchFlag {
         &mut self.flags
     }
 
@@ -191,11 +206,6 @@ impl MatchEntry {
         };
 
         Ok(Self::new(crate::Pattern::new(pattern, pattern_flags)?, ty).flags(flags))
-    }
-
-    #[inline]
-    pub fn match_type(&self) -> MatchType {
-        self.ty
     }
 
     /// Test this entry's file type restrictions against a file mode retrieved from `stat()`.
