@@ -48,11 +48,20 @@ impl Default for MatchFlag {
 pub enum MatchPattern {
     /// A glob pattern.
     Pattern(crate::Pattern),
+
+    /// A literal match.
+    Literal(Vec<u8>),
 }
 
 impl From<crate::Pattern> for MatchPattern {
     fn from(pattern: crate::Pattern) -> Self {
         MatchPattern::Pattern(pattern)
+    }
+}
+
+impl MatchPattern {
+    pub fn literal(literal: impl Into<Vec<u8>>) -> Self {
+        MatchPattern::Literal(literal.into())
     }
 }
 
@@ -234,6 +243,7 @@ impl MatchEntry {
     fn matches_path_exact_do(&self, path: &[u8]) -> bool {
         match &self.pattern {
             MatchPattern::Pattern(pattern) => pattern.matches(path),
+            MatchPattern::Literal(literal) => path == &literal[..],
         }
     }
 
