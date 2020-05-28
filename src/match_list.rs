@@ -305,103 +305,71 @@ impl MatchEntry {
     }
 }
 
-/// Convenience type for an ordered list of `MatchEntry`s. This is just a `Vec<MatchEntry>`.
-#[derive(Clone, Debug, Default)]
-pub struct MatchList {
-    list: Vec<MatchEntry>,
+#[doc(hidden)]
+pub trait MatchListEntry {
+    fn entry_matches(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType>;
+    fn entry_matches_exact(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType>;
 }
 
-impl MatchList {
-    pub fn new<T: Into<Vec<MatchEntry>>>(list: T) -> Self {
-        Self { list: list.into() }
-    }
-
-    /// Create a new empty list with a specified maximum capacity.
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            list: Vec::with_capacity(capacity),
+impl MatchListEntry for &'_ MatchEntry {
+    fn entry_matches(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
+        if self.matches(path, file_mode) {
+            Some(self.match_type())
+        } else {
+            None
         }
     }
 
-    /// Add another entry.
-    pub fn push(&mut self, entry: MatchEntry) {
-        self.list.push(entry)
-    }
-
-    /// Remove the list entry.
-    pub fn pop(&mut self) -> Option<MatchEntry> {
-        self.list.pop()
+    fn entry_matches_exact(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
+        if self.matches_exact(path, file_mode) {
+            Some(self.match_type())
+        } else {
+            None
+        }
     }
 }
 
-impl From<Vec<MatchEntry>> for MatchList {
-    fn from(list: Vec<MatchEntry>) -> Self {
-        Self { list }
-    }
-}
-
-impl Into<Vec<MatchEntry>> for MatchList {
-    fn into(self) -> Vec<MatchEntry> {
-        self.list
-    }
-}
-
-impl std::ops::Deref for MatchList {
-    type Target = MatchListRef;
-
-    fn deref(&self) -> &Self::Target {
-        (&self.list[..]).into()
-    }
-}
-
-/// Helper to provide the `matches` method on slices of `MatchEntry`s.
-#[repr(transparent)]
-pub struct MatchListRef([MatchEntry]);
-
-impl std::ops::Deref for MatchListRef {
-    type Target = [MatchEntry];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0[..]
-    }
-}
-
-impl<'a> From<&'a [MatchEntry]> for &'a MatchListRef {
-    fn from(entries: &'a [MatchEntry]) -> &'a MatchListRef {
-        unsafe { &*(entries as *const [MatchEntry] as *const MatchListRef) }
-    }
-}
-
-impl MatchListRef {
+pub trait MatchList: Sized {
     /// Check whether this list contains anything matching a prefix of the specified path, and the
     /// specified file mode.
-    pub fn matches<T: AsRef<[u8]>>(&self, path: T, file_mode: Option<u32>) -> Option<MatchType> {
+    fn matches<T: AsRef<[u8]>>(self, path: T, file_mode: Option<u32>) -> Option<MatchType> {
         self.matches_do(path.as_ref(), file_mode)
     }
 
-    fn matches_do(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
-        for m in self.iter().rev() {
-            if m.matches(path, file_mode) {
-                return Some(m.match_type());
-            }
-        }
-
-        None
-    }
+    fn matches_do(self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType>;
 
     /// Check whether this list contains anything exactly matching the path and mode.
-    pub fn matches_exact<T: AsRef<[u8]>>(
-        &self,
+    fn matches_exact<T: AsRef<[u8]>>(
+        self,
         path: T,
         file_mode: Option<u32>,
     ) -> Option<MatchType> {
         self.matches_exact_do(path.as_ref(), file_mode)
     }
 
-    fn matches_exact_do(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
-        for m in self.iter().rev() {
-            if m.matches_exact(path, file_mode) {
-                return Some(m.match_type());
+    fn matches_exact_do(self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType>;
+}
+
+impl<T> MatchList for T
+where
+    T: IntoIterator,
+    <T as IntoIterator>::IntoIter: DoubleEndedIterator,
+    <T as IntoIterator>::Item: MatchListEntry,
+{
+    fn matches_do(self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
+        for m in self.into_iter().rev() {
+            if let Some(mt) = m.entry_matches(path, file_mode) {
+                return Some(mt);
+            }
+        }
+
+        None
+    }
+
+    fn matches_exact_do(self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
+        for m in self.into_iter().rev() {
+            if let Some(mt) = m.entry_matches_exact(path, file_mode) {
+                return Some(mt);
             }
         }
 
@@ -410,19 +378,34 @@ impl MatchListRef {
 }
 
 #[test]
+fn assert_containers_implement_match_list() {
+    use std::iter::FromIterator;
+
+    let vec = vec![MatchEntry::include(crate::Pattern::path("a*").unwrap())];
+    assert_eq!(vec.matches("asdf", None), Some(MatchType::Include));
+
+    // FIXME: ideally we can make this work as well!
+    let vd = std::collections::VecDeque::<MatchEntry>::from_iter(vec.clone());
+    assert_eq!(vd.matches("asdf", None), Some(MatchType::Include));
+
+    let list: &[MatchEntry] = &vec[..];
+    assert_eq!(list.matches("asdf", None), Some(MatchType::Include));
+
+    let list: Vec<&MatchEntry> = vec.iter().collect();
+    assert_eq!(list.matches("asdf", None), Some(MatchType::Include));
+}
+
+#[test]
 fn test_file_type_matches() {
-    let matchlist = MatchList::new(
-        [
-            MatchEntry::parse_pattern("a_dir/", PatternFlag::PATH_NAME, MatchType::Include)
-                .unwrap(),
-            MatchEntry::parse_pattern("!a_file", PatternFlag::PATH_NAME, MatchType::Include)
-                .unwrap()
-                .flags(MatchFlag::MATCH_REGULAR_FILES),
-            MatchEntry::parse_pattern("!another_dir//", PatternFlag::PATH_NAME, MatchType::Include)
-                .unwrap(),
-        ]
-        .as_ref(),
-    );
+    let matchlist = vec![
+        MatchEntry::parse_pattern("a_dir/", PatternFlag::PATH_NAME, MatchType::Include)
+            .unwrap(),
+        MatchEntry::parse_pattern("!a_file", PatternFlag::PATH_NAME, MatchType::Include)
+            .unwrap()
+            .flags(MatchFlag::MATCH_REGULAR_FILES),
+        MatchEntry::parse_pattern("!another_dir//", PatternFlag::PATH_NAME, MatchType::Include)
+            .unwrap(),
+    ];
     assert_eq!(
         matchlist.matches("a_dir", Some(libc::S_IFDIR)),
         Some(MatchType::Include)
@@ -450,14 +433,11 @@ fn test_file_type_matches() {
 fn test_anchored_matches() {
     use crate::Pattern;
 
-    let matchlist = MatchList::new(
-        [
-            MatchEntry::new(Pattern::path("file-a").unwrap(), MatchType::Include),
-            MatchEntry::new(Pattern::path("some/path").unwrap(), MatchType::Include)
-                .flags(MatchFlag::ANCHORED),
-        ]
-        .as_ref(),
-    );
+    let matchlist = vec![
+        MatchEntry::new(Pattern::path("file-a").unwrap(), MatchType::Include),
+        MatchEntry::new(Pattern::path("some/path").unwrap(), MatchType::Include)
+            .flags(MatchFlag::ANCHORED),
+    ];
 
     assert_eq!(matchlist.matches("file-a", None), Some(MatchType::Include));
     assert_eq!(

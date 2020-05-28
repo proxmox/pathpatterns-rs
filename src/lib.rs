@@ -25,11 +25,11 @@
 //!     b"/things/shop/bananas/other.txt",
 //! ];
 //!
-//! let mut list = MatchList::new(vec![
+//! let mut list = vec![
 //!     MatchEntry::include(Pattern::path("shop")?),
 //!     MatchEntry::exclude(Pattern::path("bananas")?),
 //!     MatchEntry::include(Pattern::path("bananas/curved.*")?),
-//! ]);
+//! ];
 //!
 //! assert_eq!(list.matches("/things", None), None);
 //! assert_eq!(list.matches("/things/shop", None), Some(MatchType::Include));
@@ -53,9 +53,7 @@
 //! list.pop();
 //!
 //! // let's check some patterns, anything starting with a 'c', 'f' or 's':
-//! let mut list = MatchList::new(vec![
-//!     MatchEntry::include(Pattern::path("[cfs]*")?),
-//! ]);
+//! let mut list = vec![MatchEntry::include(Pattern::path("[cfs]*")?)];
 //! assert_eq!(list.matches("/things", None), None);
 //! assert_eq!(list.matches("/things/file1.dat", None), Some(MatchType::Include));
 //! assert_eq!(list.matches("/things/file2.dat", None), Some(MatchType::Include));
@@ -94,7 +92,7 @@ mod match_list;
 mod pattern;
 
 #[doc(inline)]
-pub use match_list::{MatchEntry, MatchFlag, MatchList, MatchListRef, MatchPattern, MatchType};
+pub use match_list::{MatchEntry, MatchFlag, MatchList, MatchPattern, MatchType};
 
 #[doc(inline)]
 pub use pattern::{ParseError, Pattern, PatternFlag};
