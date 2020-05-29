@@ -325,6 +325,24 @@ impl MatchListEntry for &'_ MatchEntry {
     }
 }
 
+impl MatchListEntry for &'_ &'_ MatchEntry {
+    fn entry_matches(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
+        if self.matches(path, file_mode) {
+            Some(self.match_type())
+        } else {
+            None
+        }
+    }
+
+    fn entry_matches_exact(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
+        if self.matches_exact(path, file_mode) {
+            Some(self.match_type())
+        } else {
+            None
+        }
+    }
+}
+
 /// This provides `matches` and `matches_exact` methods to lists of `MatchEntry`s.
 ///
 /// Technically this is implemented for anything you can turn into a `DoubleEndedIterator` over
@@ -332,35 +350,39 @@ impl MatchListEntry for &'_ MatchEntry {
 ///
 /// In practice this means you can use it with slices or references to `Vec` or `VecDeque` etc.
 /// This makes it easier to use slices over entries or references to entries.
-pub trait MatchList: Sized {
+pub trait MatchList {
     /// Check whether this list contains anything matching a prefix of the specified path, and the
     /// specified file mode.
-    fn matches<T: AsRef<[u8]>>(self, path: T, file_mode: Option<u32>) -> Option<MatchType> {
+    fn matches<T: AsRef<[u8]>>(&self, path: T, file_mode: Option<u32>) -> Option<MatchType> {
         self.matches_do(path.as_ref(), file_mode)
     }
 
-    fn matches_do(self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType>;
+    fn matches_do(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType>;
 
     /// Check whether this list contains anything exactly matching the path and mode.
     fn matches_exact<T: AsRef<[u8]>>(
-        self,
+        &self,
         path: T,
         file_mode: Option<u32>,
     ) -> Option<MatchType> {
         self.matches_exact_do(path.as_ref(), file_mode)
     }
 
-    fn matches_exact_do(self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType>;
+    fn matches_exact_do(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType>;
 }
 
-impl<T> MatchList for T
+impl<'a, T> MatchList for T
 where
-    T: IntoIterator,
-    <T as IntoIterator>::IntoIter: DoubleEndedIterator,
-    <T as IntoIterator>::Item: MatchListEntry,
+    T: 'a + ?Sized,
+    &'a T: IntoIterator,
+    <&'a T as IntoIterator>::IntoIter: DoubleEndedIterator,
+    <&'a T as IntoIterator>::Item: MatchListEntry,
 {
-    fn matches_do(self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
-        for m in self.into_iter().rev() {
+    fn matches_do(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
+        // This is an &self method on a `T where T: 'a`.
+        let this: &'a Self = unsafe { std::mem::transmute(self) };
+
+        for m in this.into_iter().rev() {
             if let Some(mt) = m.entry_matches(path, file_mode) {
                 return Some(mt);
             }
@@ -369,8 +391,11 @@ where
         None
     }
 
-    fn matches_exact_do(self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
-        for m in self.into_iter().rev() {
+    fn matches_exact_do(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
+        // This is an &self method on a `T where T: 'a`.
+        let this: &'a Self = unsafe { std::mem::transmute(self) };
+
+        for m in this.into_iter().rev() {
             if let Some(mt) = m.entry_matches_exact(path, file_mode) {
                 return Some(mt);
             }
@@ -395,6 +420,9 @@ fn assert_containers_implement_match_list() {
     assert_eq!(list.matches("asdf", None), Some(MatchType::Include));
 
     let list: Vec<&MatchEntry> = vec.iter().collect();
+    assert_eq!(list.matches("asdf", None), Some(MatchType::Include));
+
+    let list: &[&MatchEntry] = &list[..];
     assert_eq!(list.matches("asdf", None), Some(MatchType::Include));
 }
 
