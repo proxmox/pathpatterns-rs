@@ -325,6 +325,13 @@ impl MatchListEntry for &'_ MatchEntry {
     }
 }
 
+/// This provides `matches` and `matches_exact` methods to lists of `MatchEntry`s.
+///
+/// Technically this is implemented for anything you can turn into a `DoubleEndedIterator` over
+/// `MatchEntry` or `&MatchEntry`.
+///
+/// In practice this means you can use it with slices or references to `Vec` or `VecDeque` etc.
+/// This makes it easier to use slices over entries or references to entries.
 pub trait MatchList: Sized {
     /// Check whether this list contains anything matching a prefix of the specified path, and the
     /// specified file mode.
