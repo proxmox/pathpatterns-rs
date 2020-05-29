@@ -252,12 +252,8 @@ impl MatchEntry {
             }
         }
 
-        if path[0] != b'/' {
-            // we had "foo/bar", so we haven't yet tried to match the whole string:
-            self.matches_path_exact(path)
-        } else {
-            false
-        }
+        // and try the whole string as well:
+        self.matches_path_exact(path)
     }
 
     /// Test whether this entry's pattern matches a path exactly.
@@ -452,4 +448,12 @@ fn test_anchored_matches() {
         Some(MatchType::Include)
     );
     assert_eq!(matchlist.matches("another/some/path", None), None);
+}
+
+#[test]
+fn test_literal_matches() {
+    let matchlist = vec![
+        MatchEntry::new(MatchPattern::Literal(b"/bin/mv".to_vec()), MatchType::Include),
+    ];
+    assert_eq!(matchlist.matches("/bin/mv", None), Some(MatchType::Include));
 }
