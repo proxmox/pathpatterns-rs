@@ -169,7 +169,7 @@ impl MatchEntry {
     }
 
     /// Directly access the match flags.
-    pub fn match_flags(&mut self) -> MatchFlag {
+    pub fn match_flags(&self) -> MatchFlag {
         self.flags
     }
 
