@@ -1,3 +1,9 @@
+rust-pathpatterns (0.1.1-1) pve; urgency=medium
+
+  * let MatchEntry::match_flags() take immutable self
+
+ -- Proxmox Support Team <support@proxmox.com>  Tue, 09 Jun 2020 12:58:03 +0200
+
 rust-pathpatterns (0.1.0-1) pve; urgency=medium
 
   * initial release
