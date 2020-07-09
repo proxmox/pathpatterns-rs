@@ -495,7 +495,7 @@ impl Pattern {
                             && ((ci + 1) == components.len()
                                 || components[ci + 1].starts_with_slash())
                         {
-                            // Assuming we matched `foo/` and are at `/` `**` `/`, see if we an let
+                            // Assuming we matched `foo/` and are at `/` `**` `/`, see if we can let
                             // it match nothing, so that `foo/` `**` `/bar` can match `foo/bar`.
                             //
                             // Under the condition that the previous component ended with a slash
@@ -700,7 +700,6 @@ fn test() {
         PatternFlag::PATH_NAME | PatternFlag::IGNORE_CASE,
     )
     .unwrap();
-    eprintln!("{:#?}", pattern);
     assert!(pattern.matches("aBcUl3"));
     assert!(pattern.matches("AbCuL9"));
     assert!(!pattern.matches("aBgUl3"));
