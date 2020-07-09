@@ -396,14 +396,16 @@ impl Pattern {
 
     /// Check whether this pattern matches a text.
     pub fn matches<T: AsRef<[u8]>>(&self, text: T) -> bool {
-        match self.do_matches(&self.components, 0, text.as_ref()) {
+        match self.do_matches(0, text.as_ref()) {
             MatchResult::Match => true,
             _ => false,
         }
     }
 
     // The algorithm is ported from git's wildmatch.c.
-    fn do_matches(&self, components: &[Component], mut ci: usize, mut text: &[u8]) -> MatchResult {
+    fn do_matches(&self, mut ci: usize, mut text: &[u8]) -> MatchResult {
+        let components = &self.components[..];
+
         if self.flags.intersects(PatternFlag::PATH_NAME) {
             // If we match a path then we want the pattern `"foo"` to match the path `"/foo"`.
         }
@@ -472,7 +474,7 @@ impl Pattern {
                         // FIXME: Optimization: Add the "try to advance faster" optimization from
                         // git here.
 
-                        match self.do_matches(components, ci + 1, text) {
+                        match self.do_matches(ci + 1, text) {
                             MatchResult::NoMatch => {
                                 if text[0] == b'/' {
                                     return MatchResult::AbortToStarStar;
@@ -490,8 +492,7 @@ impl Pattern {
                     }
 
                     if let Component::StarStar = components[ci] {
-                        if ci > 0
-                            && components[ci - 1].ends_with_slash()
+                        if ((ci > 0 && components[ci - 1].ends_with_slash()) || ci == 0)
                             && ((ci + 1) == components.len()
                                 || components[ci + 1].starts_with_slash())
                         {
@@ -505,7 +506,7 @@ impl Pattern {
                                 std::slice::from_raw_parts(text.as_ptr().offset(-1), text.len() + 1)
                             };
                             #[allow(clippy::single_match)]
-                            match self.do_matches(components, ci + 1, text) {
+                            match self.do_matches(ci + 1, text) {
                                 MatchResult::Match => return MatchResult::Match,
                                 _ => (), // or just continue regularly
                             }
@@ -518,7 +519,7 @@ impl Pattern {
                             return MatchResult::AbortAll;
                         }
 
-                        match self.do_matches(components, ci + 1, text) {
+                        match self.do_matches(ci + 1, text) {
                             MatchResult::NoMatch => (),
                             MatchResult::AbortToStarStar => (), // continue from here
                             other => return other,
