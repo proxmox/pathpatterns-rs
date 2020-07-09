@@ -396,14 +396,19 @@ impl Pattern {
 
     /// Check whether this pattern matches a text.
     pub fn matches<T: AsRef<[u8]>>(&self, text: T) -> bool {
-        match self.do_matches(0, text.as_ref()) {
+        match self.do_matches(0, text.as_ref(), false) {
             MatchResult::Match => true,
             _ => false,
         }
     }
 
     // The algorithm is ported from git's wildmatch.c.
-    fn do_matches(&self, mut ci: usize, mut text: &[u8]) -> MatchResult {
+    fn do_matches(
+        &self,
+        mut ci: usize,
+        mut text: &[u8],
+        mut skip_slash_in_literal: bool,
+    ) -> MatchResult {
         let components = &self.components[..];
 
         if self.flags.intersects(PatternFlag::PATH_NAME) {
@@ -411,6 +416,7 @@ impl Pattern {
         }
 
         while ci != components.len() {
+            let skip_slash_in_literal = mem::replace(&mut skip_slash_in_literal, false);
             //eprintln!("Matching: {:?} at text: {:?}", components[ci], unsafe {
             //    std::str::from_utf8_unchecked(text)
             //},);
@@ -422,6 +428,12 @@ impl Pattern {
                         // match can `AbortAll` if the text is empty.
                         return MatchResult::AbortAll;
                     }
+
+                    let literal = if skip_slash_in_literal {
+                        &literal[1..]
+                    } else {
+                        literal
+                    };
 
                     if !starts_with(text, &literal, self.flags) {
                         return MatchResult::NoMatch;
@@ -474,7 +486,7 @@ impl Pattern {
                         // FIXME: Optimization: Add the "try to advance faster" optimization from
                         // git here.
 
-                        match self.do_matches(ci + 1, text) {
+                        match self.do_matches(ci + 1, text, false) {
                             MatchResult::NoMatch => {
                                 if text[0] == b'/' {
                                     return MatchResult::AbortToStarStar;
@@ -498,15 +510,8 @@ impl Pattern {
                         {
                             // Assuming we matched `foo/` and are at `/` `**` `/`, see if we can let
                             // it match nothing, so that `foo/` `**` `/bar` can match `foo/bar`.
-                            //
-                            // Under the condition that the previous component ended with a slash
-                            // (`components[ci - 1].ends_with_slash()`) we can safely move back by
-                            // a byte in `text`.
-                            let text = unsafe {
-                                std::slice::from_raw_parts(text.as_ptr().offset(-1), text.len() + 1)
-                            };
                             #[allow(clippy::single_match)]
-                            match self.do_matches(ci + 1, text) {
+                            match self.do_matches(ci + 1, text, true) {
                                 MatchResult::Match => return MatchResult::Match,
                                 _ => (), // or just continue regularly
                             }
@@ -519,7 +524,7 @@ impl Pattern {
                             return MatchResult::AbortAll;
                         }
 
-                        match self.do_matches(ci + 1, text) {
+                        match self.do_matches(ci + 1, text, false) {
                             MatchResult::NoMatch => (),
                             MatchResult::AbortToStarStar => (), // continue from here
                             other => return other,
@@ -713,4 +718,15 @@ fn test() {
     let pattern = Pattern::new("a/b**/c", PatternFlag::PATH_NAME).unwrap();
     assert!(pattern.matches("a/bxx/c"));
     assert!(!pattern.matches("a/bxx/yy/c"));
+
+    let pattern = Pattern::new("**/lost+found", PatternFlag::PATH_NAME).unwrap();
+    assert!(pattern.matches("/foo/lost+found"));
+    assert!(pattern.matches("foo/lost+found"));
+    assert!(pattern.matches("/lost+found"));
+    assert!(pattern.matches("///lost+found"));
+    assert!(pattern.matches("lost+found"));
+    assert!(!pattern.matches("lost+found2"));
+    assert!(!pattern.matches("lost+found/"));
+    assert!(!pattern.matches("xlost+found"));
+    assert!(!pattern.matches("xlost+found/"));
 }
