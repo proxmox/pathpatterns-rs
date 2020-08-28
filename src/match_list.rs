@@ -360,11 +360,7 @@ pub trait MatchList {
     fn matches_do(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType>;
 
     /// Check whether this list contains anything exactly matching the path and mode.
-    fn matches_exact<T: AsRef<[u8]>>(
-        &self,
-        path: T,
-        file_mode: Option<u32>,
-    ) -> Option<MatchType> {
+    fn matches_exact<T: AsRef<[u8]>>(&self, path: T, file_mode: Option<u32>) -> Option<MatchType> {
         self.matches_exact_do(path.as_ref(), file_mode)
     }
 
@@ -429,8 +425,7 @@ fn assert_containers_implement_match_list() {
 #[test]
 fn test_file_type_matches() {
     let matchlist = vec![
-        MatchEntry::parse_pattern("a_dir/", PatternFlag::PATH_NAME, MatchType::Include)
-            .unwrap(),
+        MatchEntry::parse_pattern("a_dir/", PatternFlag::PATH_NAME, MatchType::Include).unwrap(),
         MatchEntry::parse_pattern("!a_file", PatternFlag::PATH_NAME, MatchType::Include)
             .unwrap()
             .flags(MatchFlag::MATCH_REGULAR_FILES),
@@ -487,8 +482,9 @@ fn test_anchored_matches() {
 
 #[test]
 fn test_literal_matches() {
-    let matchlist = vec![
-        MatchEntry::new(MatchPattern::Literal(b"/bin/mv".to_vec()), MatchType::Include),
-    ];
+    let matchlist = vec![MatchEntry::new(
+        MatchPattern::Literal(b"/bin/mv".to_vec()),
+        MatchType::Include,
+    )];
     assert_eq!(matchlist.matches("/bin/mv", None), Some(MatchType::Include));
 }
