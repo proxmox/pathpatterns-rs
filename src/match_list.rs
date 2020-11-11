@@ -488,3 +488,36 @@ fn test_literal_matches() {
     )];
     assert_eq!(matchlist.matches("/bin/mv", None), Some(MatchType::Include));
 }
+
+#[test]
+fn test_path_relativity() {
+    use crate::Pattern;
+    let matchlist = vec![
+        MatchEntry::new(Pattern::path("noslash").unwrap(), MatchType::Include),
+        MatchEntry::new(Pattern::path("noslash-a").unwrap(), MatchType::Include)
+            .flags(MatchFlag::ANCHORED),
+        MatchEntry::new(Pattern::path("/slash").unwrap(), MatchType::Include),
+        MatchEntry::new(Pattern::path("/slash-a").unwrap(), MatchType::Include)
+            .flags(MatchFlag::ANCHORED),
+    ];
+    assert_eq!(matchlist.matches("noslash", None), Some(MatchType::Include));
+    assert_eq!(
+        matchlist.matches("noslash-a", None),
+        Some(MatchType::Include)
+    );
+    assert_eq!(matchlist.matches("slash", None), None);
+    assert_eq!(matchlist.matches("/slash", None), Some(MatchType::Include));
+    assert_eq!(matchlist.matches("slash-a", None), None);
+    assert_eq!(
+        matchlist.matches("/slash-a", None),
+        Some(MatchType::Include)
+    );
+
+    assert_eq!(
+        matchlist.matches("foo/noslash", None),
+        Some(MatchType::Include)
+    );
+    assert_eq!(matchlist.matches("foo/noslash-a", None), None);
+    assert_eq!(matchlist.matches("foo/slash", None), None);
+    assert_eq!(matchlist.matches("foo/slash-a", None), None);
+}
