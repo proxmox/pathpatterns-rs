@@ -39,11 +39,10 @@ impl Default for MatchFlag {
     }
 }
 
-/// A pattern entry. For now this only contains glob patterns, but we may want to add regex
-/// patterns or user defined callback functions later on as well.
-///
-/// For regex we'd likely use the POSIX extended REs via `regexec(3)`, since we're targetting
-/// command line interfaces and want something command line users are used to.
+/// A pattern entry. (Glob patterns or literal patterns.)
+// Note:
+// For regex we'd likely use the POSIX extended REs via `regexec(3)`, since we're targetting
+// command line interfaces and want something command line users are used to.
 #[derive(Clone, Debug)]
 pub enum MatchPattern {
     /// A glob pattern.
@@ -65,7 +64,7 @@ impl MatchPattern {
     }
 }
 
-/// A pattern can be used as an include or an exclude pattern. In a list of `MatchEntry`s, later
+/// A pattern can be used as an include or an exclude pattern. In a [`MatchEntry`] list, later
 /// patterns take precedence over earlier patterns and the order of includes vs excludes makes a
 /// difference.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -96,7 +95,7 @@ impl std::ops::Not for MatchType {
     }
 }
 
-/// A single entry in a `MatchList`.
+/// A single entry in a [`MatchList`].
 #[derive(Clone, Debug)]
 pub struct MatchEntry {
     pattern: MatchPattern,
@@ -178,7 +177,7 @@ impl MatchEntry {
         &mut self.flags
     }
 
-    /// Parse a pattern into a `MatchEntry` while interpreting a leading exclamation mark as
+    /// Parse a pattern into a [`MatchEntry`] while interpreting a leading exclamation mark as
     /// inversion and trailing slashes to match only directories.
     pub fn parse_pattern<T: AsRef<[u8]>>(
         pattern: T,
@@ -268,8 +267,11 @@ impl MatchEntry {
         }
     }
 
-    /// Check whether the path contains a matching suffix and the file mode match the expected file modes.
-    /// This is a combination of using `.matches_mode()` and `.matches_path_suffix()`.
+    /// Check whether the path contains a matching suffix and the file mode match the expected file
+    /// modes.
+    ///
+    /// This is a combination of using [`matches_mode()`](MatchEntry::matches_mode()) and
+    /// [`matches_path_suffix()`](MatchEntry::matches_path_suffix()).
     pub fn matches<T: AsRef<[u8]>>(&self, path: T, file_mode: Option<u32>) -> bool {
         self.matches_do(path.as_ref(), file_mode)
     }
@@ -284,8 +286,11 @@ impl MatchEntry {
         self.matches_path_suffix(path)
     }
 
-    /// Check whether the path contains a matching suffix and the file mode match the expected file modes.
-    /// This is a combination of using `.matches_mode()` and `.matches_path_exact()`.
+    /// Check whether the path contains a matching suffix and the file mode match the expected file
+    /// modes.
+    ///
+    /// This is a combination of using [`matches_mode()`](MatchEntry::matches_mode()) and
+    /// [`matches_path_exact()`](MatchEntry::matches_path_exact()).
     pub fn matches_exact<T: AsRef<[u8]>>(&self, path: T, file_mode: Option<u32>) -> bool {
         self.matches_exact_do(path.as_ref(), file_mode)
     }
@@ -343,12 +348,16 @@ impl MatchListEntry for &'_ &'_ MatchEntry {
     }
 }
 
-/// This provides `matches` and `matches_exact` methods to lists of `MatchEntry`s.
+/// This provides [`matches`](MatchList::matches) and [`matches_exact`](MatchList::matches_exact)
+/// methods to lists of [`MatchEntry`] items.
 ///
-/// Technically this is implemented for anything you can turn into a `DoubleEndedIterator` over
-/// `MatchEntry` or `&MatchEntry`.
+/// Technically this is implemented for anything that you can turn into a
+/// [`DoubleEndedIterator`](std::iter::DoubleEndedIterator) over [`MatchEntry`] or
+/// [`&MatchEntry`](MatchEntry).
 ///
-/// In practice this means you can use it with slices or references to `Vec` or `VecDeque` etc.
+/// In practice this means you can use it with slices or references to [`Vec`](std::vec::Vec) or
+/// [`VecDeque`](std::collections::VecDeque) etc.
+///
 /// This makes it easier to use slices over entries or references to entries.
 pub trait MatchList {
     /// Check whether this list contains anything matching a prefix of the specified path, and the

@@ -131,8 +131,8 @@ enum MatchResult {
 /// paths.
 ///
 /// Note that patterns are treated as ASCII strings, so unicode characters have no special effect.
-/// You can use it for UTF-8 paths, but there's no direct support for `PatternFlag::IGNORE_CASE` on
-/// unicode text.
+/// You can use it for UTF-8 paths, but there's no direct support for the
+/// [`IGNORE_CASE`](PatternFlag::IGNORE_CASE) flag on unicode text.
 #[derive(Clone, Debug)]
 pub struct Pattern {
     /// Original pattern the user provided.
@@ -159,7 +159,8 @@ impl Pattern {
         Self::new_do(pattern.as_ref(), flags)
     }
 
-    /// Convenience shortcut to create a new pattern with `PatternFlag::PATH_NAME`.
+    /// Convenience shortcut to create a new pattern with the [`PATH_NAME`](PatternFlag::PATH_NAME)
+    /// flag.
     pub fn path<T: AsRef<[u8]>>(pattern: T) -> Result<Self, ParseError> {
         Self::new_do(pattern.as_ref(), PatternFlag::PATH_NAME)
     }
