@@ -317,7 +317,7 @@ impl Pattern {
                 }
                 b'[' if pattern[(i + 1)..].starts_with(b":print:]") => {
                     i += 8;
-                    class.named.push(|b| b >= 0x20 && b <= 0x7f);
+                    class.named.push(|b| (0x20..=0x7f).contains(&b));
                 }
                 b'[' if pattern[(i + 1)..].starts_with(b":punct:]") => {
                     i += 8;
@@ -397,10 +397,7 @@ impl Pattern {
 
     /// Check whether this pattern matches a text.
     pub fn matches<T: AsRef<[u8]>>(&self, text: T) -> bool {
-        match self.do_matches(0, text.as_ref(), false) {
-            MatchResult::Match => true,
-            _ => false,
-        }
+        matches!(self.do_matches(0, text.as_ref(), false), MatchResult::Match)
     }
 
     // The algorithm is ported from git's wildmatch.c.
@@ -436,7 +433,7 @@ impl Pattern {
                         literal
                     };
 
-                    if !starts_with(text, &literal, self.flags) {
+                    if !starts_with(text, literal, self.flags) {
                         return MatchResult::NoMatch;
                     }
 
