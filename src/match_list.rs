@@ -192,7 +192,7 @@ impl MatchEntry {
         pattern_flags: PatternFlag,
         ty: MatchType,
     ) -> Result<Self, crate::ParseError> {
-        let (pattern, ty) = if pattern.get(0).copied() == Some(b'!') {
+        let (pattern, ty) = if pattern.first().copied() == Some(b'!') {
             (&pattern[1..], !ty)
         } else {
             (pattern, ty)
