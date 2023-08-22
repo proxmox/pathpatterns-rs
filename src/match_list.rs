@@ -1,5 +1,4 @@
 //! Helpers for include/exclude lists.
-
 use bitflags::bitflags;
 
 use crate::PatternFlag;
@@ -36,6 +35,46 @@ bitflags! {
 impl Default for MatchFlag {
     fn default() -> Self {
         Self::ANY_FILE_TYPE
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct FileModeRequired;
+
+impl std::fmt::Display for FileModeRequired {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "File mode is required for matching")
+    }
+}
+
+impl std::error::Error for FileModeRequired {}
+
+pub trait GetFileMode {
+    type Error;
+    fn get(self) -> Result<u32, Self::Error>;
+}
+
+impl<T, E> GetFileMode for T
+where
+    T: FnOnce() -> Result<u32, E>,
+{
+    type Error = E;
+    fn get(self) -> Result<u32, Self::Error> {
+        self()
+    }
+}
+
+impl GetFileMode for Option<u32> {
+    type Error = FileModeRequired;
+    fn get(self) -> Result<u32, Self::Error> {
+        self.ok_or(FileModeRequired {})
+    }
+}
+
+impl GetFileMode for u32 {
+    type Error = std::convert::Infallible;
+    fn get(self) -> Result<u32, Self::Error> {
+        Ok(self)
     }
 }
 
@@ -211,7 +250,7 @@ impl MatchEntry {
     pub fn matches_mode(&self, file_mode: u32) -> bool {
         // bitflags' `.contains` means ALL bits must be set, if they are all set we don't
         // need to check the mode...
-        if self.flags.contains(MatchFlag::ANY_FILE_TYPE) {
+        if !self.needs_file_mode() {
             return true;
         }
 
@@ -304,12 +343,21 @@ impl MatchEntry {
 
         self.matches_path_exact(path)
     }
+
+    pub fn needs_file_mode(&self) -> bool {
+        let flags = (self.flags & MatchFlag::ANY_FILE_TYPE).bits();
+        if flags != 0 && flags != MatchFlag::ANY_FILE_TYPE.bits() {
+            return true;
+        }
+        false
+    }
 }
 
 #[doc(hidden)]
 pub trait MatchListEntry {
     fn entry_matches(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType>;
     fn entry_matches_exact(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType>;
+    fn entry_needs_file_mode(&self) -> bool;
 }
 
 impl MatchListEntry for &'_ MatchEntry {
@@ -327,6 +375,10 @@ impl MatchListEntry for &'_ MatchEntry {
         } else {
             None
         }
+    }
+
+    fn entry_needs_file_mode(&self) -> bool {
+        self.needs_file_mode()
     }
 }
 
@@ -346,6 +398,10 @@ impl MatchListEntry for &'_ &'_ MatchEntry {
             None
         }
     }
+
+    fn entry_needs_file_mode(&self) -> bool {
+        self.needs_file_mode()
+    }
 }
 
 /// This provides [`matches`](MatchList::matches) and [`matches_exact`](MatchList::matches_exact)
@@ -361,19 +417,18 @@ impl MatchListEntry for &'_ &'_ MatchEntry {
 /// This makes it easier to use slices over entries or references to entries.
 pub trait MatchList {
     /// Check whether this list contains anything matching a prefix of the specified path, and the
-    /// specified file mode.
-    fn matches<T: AsRef<[u8]>>(&self, path: T, file_mode: Option<u32>) -> Option<MatchType> {
-        self.matches_do(path.as_ref(), file_mode)
-    }
+    /// specified file mode. Gets the file_mode lazily, only if needed.
+    fn matches<P, U>(&self, path: P, get_file_mode: U) -> Result<Option<MatchType>, U::Error>
+    where
+        P: AsRef<[u8]>,
+        U: GetFileMode;
 
-    fn matches_do(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType>;
-
-    /// Check whether this list contains anything exactly matching the path and mode.
-    fn matches_exact<T: AsRef<[u8]>>(&self, path: T, file_mode: Option<u32>) -> Option<MatchType> {
-        self.matches_exact_do(path.as_ref(), file_mode)
-    }
-
-    fn matches_exact_do(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType>;
+    /// Check whether this list contains anything exactly matching the path and mode. Gets the
+    /// file_mode lazily, only if needed.
+    fn matches_exact<P, U>(&self, path: P, get_file_mode: U) -> Result<Option<MatchType>, U::Error>
+    where
+        P: AsRef<[u8]>,
+        U: GetFileMode;
 }
 
 impl<'a, T> MatchList for T
@@ -383,30 +438,48 @@ where
     <&'a T as IntoIterator>::IntoIter: DoubleEndedIterator,
     <&'a T as IntoIterator>::Item: MatchListEntry,
 {
-    fn matches_do(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
+    fn matches<P, G>(&self, path: P, get_file_mode: G) -> Result<Option<MatchType>, G::Error>
+    where
+        P: AsRef<[u8]>,
+        G: GetFileMode,
+    {
         // This is an &self method on a `T where T: 'a`.
         let this: &'a Self = unsafe { std::mem::transmute(self) };
 
+        let mut get_file_mode = Some(get_file_mode);
+        let mut file_mode = None;
+
         for m in this.into_iter().rev() {
-            if let Some(mt) = m.entry_matches(path, file_mode) {
-                return Some(mt);
+            if file_mode.is_none() && m.entry_needs_file_mode() {
+                file_mode = Some(get_file_mode.take().unwrap().get()?);
+            }
+            if let Some(mt) = m.entry_matches(path.as_ref(), file_mode) {
+                return Ok(Some(mt));
             }
         }
-
-        None
+        Ok(None)
     }
 
-    fn matches_exact_do(&self, path: &[u8], file_mode: Option<u32>) -> Option<MatchType> {
+    fn matches_exact<P, G>(&self, path: P, get_file_mode: G) -> Result<Option<MatchType>, G::Error>
+    where
+        P: AsRef<[u8]>,
+        G: GetFileMode,
+    {
         // This is an &self method on a `T where T: 'a`.
         let this: &'a Self = unsafe { std::mem::transmute(self) };
 
+        let mut get_file_mode = Some(get_file_mode);
+        let mut file_mode = None;
+
         for m in this.into_iter().rev() {
-            if let Some(mt) = m.entry_matches_exact(path, file_mode) {
-                return Some(mt);
+            if file_mode.is_none() && m.entry_needs_file_mode() {
+                file_mode = Some(get_file_mode.take().unwrap().get()?);
+            }
+            if let Some(mt) = m.entry_matches_exact(path.as_ref(), file_mode) {
+                return Ok(Some(mt));
             }
         }
-
-        None
+        Ok(None)
     }
 }
 
@@ -415,20 +488,20 @@ fn assert_containers_implement_match_list() {
     use std::iter::FromIterator;
 
     let vec = vec![MatchEntry::include(crate::Pattern::path("a*").unwrap())];
-    assert_eq!(vec.matches("asdf", None), Some(MatchType::Include));
+    assert_eq!(vec.matches("asdf", None), Ok(Some(MatchType::Include)));
 
     // FIXME: ideally we can make this work as well!
     let vd = std::collections::VecDeque::<MatchEntry>::from_iter(vec.clone());
-    assert_eq!(vd.matches("asdf", None), Some(MatchType::Include));
+    assert_eq!(vd.matches("asdf", None), Ok(Some(MatchType::Include)));
 
     let list: &[MatchEntry] = &vec[..];
-    assert_eq!(list.matches("asdf", None), Some(MatchType::Include));
+    assert_eq!(list.matches("asdf", None), Ok(Some(MatchType::Include)));
 
     let list: Vec<&MatchEntry> = vec.iter().collect();
-    assert_eq!(list.matches("asdf", None), Some(MatchType::Include));
+    assert_eq!(list.matches("asdf", None), Ok(Some(MatchType::Include)));
 
     let list: &[&MatchEntry] = &list[..];
-    assert_eq!(list.matches("asdf", None), Some(MatchType::Include));
+    assert_eq!(list.matches("asdf", None), Ok(Some(MatchType::Include)));
 }
 
 #[test]
@@ -443,25 +516,28 @@ fn test_file_type_matches() {
     ];
     assert_eq!(
         matchlist.matches("a_dir", Some(libc::S_IFDIR)),
-        Some(MatchType::Include)
+        Ok(Some(MatchType::Include))
     );
     assert_eq!(
         matchlist.matches("/a_dir", Some(libc::S_IFDIR)),
-        Some(MatchType::Include)
+        Ok(Some(MatchType::Include))
     );
-    assert_eq!(matchlist.matches("/a_dir", Some(libc::S_IFREG)), None);
+    assert_eq!(matchlist.matches("/a_dir", Some(libc::S_IFREG)), Ok(None));
 
     assert_eq!(
         matchlist.matches("/a_file", Some(libc::S_IFREG)),
-        Some(MatchType::Exclude)
+        Ok(Some(MatchType::Exclude))
     );
-    assert_eq!(matchlist.matches("/a_file", Some(libc::S_IFDIR)), None);
+    assert_eq!(matchlist.matches("/a_file", Some(libc::S_IFDIR)), Ok(None));
 
     assert_eq!(
         matchlist.matches("/another_dir", Some(libc::S_IFDIR)),
-        Some(MatchType::Exclude)
+        Ok(Some(MatchType::Exclude))
     );
-    assert_eq!(matchlist.matches("/another_dir", Some(libc::S_IFREG)), None);
+    assert_eq!(
+        matchlist.matches("/another_dir", Some(libc::S_IFREG)),
+        Ok(None)
+    );
 }
 
 #[test]
@@ -471,22 +547,25 @@ fn test_anchored_matches() {
     let matchlist = vec![
         MatchEntry::new(Pattern::path("file-a").unwrap(), MatchType::Include),
         MatchEntry::new(Pattern::path("some/path").unwrap(), MatchType::Include)
-            .flags(MatchFlag::ANCHORED),
+            .add_flags(MatchFlag::ANCHORED),
     ];
 
-    assert_eq!(matchlist.matches("file-a", None), Some(MatchType::Include));
+    assert_eq!(
+        matchlist.matches("file-a", None),
+        Ok(Some(MatchType::Include))
+    );
     assert_eq!(
         matchlist.matches("another/file-a", None),
-        Some(MatchType::Include)
+        Ok(Some(MatchType::Include))
     );
 
-    assert_eq!(matchlist.matches("some", None), None);
-    assert_eq!(matchlist.matches("path", None), None);
+    assert_eq!(matchlist.matches("some", None), Ok(None));
+    assert_eq!(matchlist.matches("path", None), Ok(None));
     assert_eq!(
         matchlist.matches("some/path", None),
-        Some(MatchType::Include)
+        Ok(Some(MatchType::Include))
     );
-    assert_eq!(matchlist.matches("another/some/path", None), None);
+    assert_eq!(matchlist.matches("another/some/path", None), Ok(None));
 }
 
 #[test]
@@ -495,7 +574,10 @@ fn test_literal_matches() {
         MatchPattern::Literal(b"/bin/mv".to_vec()),
         MatchType::Include,
     )];
-    assert_eq!(matchlist.matches("/bin/mv", None), Some(MatchType::Include));
+    assert_eq!(
+        matchlist.matches("/bin/mv", None),
+        Ok(Some(MatchType::Include))
+    );
 }
 
 #[test]
@@ -504,29 +586,168 @@ fn test_path_relativity() {
     let matchlist = vec![
         MatchEntry::new(Pattern::path("noslash").unwrap(), MatchType::Include),
         MatchEntry::new(Pattern::path("noslash-a").unwrap(), MatchType::Include)
-            .flags(MatchFlag::ANCHORED),
+            .add_flags(MatchFlag::ANCHORED),
         MatchEntry::new(Pattern::path("/slash").unwrap(), MatchType::Include),
         MatchEntry::new(Pattern::path("/slash-a").unwrap(), MatchType::Include)
-            .flags(MatchFlag::ANCHORED),
+            .add_flags(MatchFlag::ANCHORED),
     ];
-    assert_eq!(matchlist.matches("noslash", None), Some(MatchType::Include));
+    assert_eq!(
+        matchlist.matches("noslash", None),
+        Ok(Some(MatchType::Include))
+    );
     assert_eq!(
         matchlist.matches("noslash-a", None),
-        Some(MatchType::Include)
+        Ok(Some(MatchType::Include))
     );
-    assert_eq!(matchlist.matches("slash", None), None);
-    assert_eq!(matchlist.matches("/slash", None), Some(MatchType::Include));
-    assert_eq!(matchlist.matches("slash-a", None), None);
+    assert_eq!(matchlist.matches("slash", None), Ok(None));
+    assert_eq!(
+        matchlist.matches("/slash", None),
+        Ok(Some(MatchType::Include))
+    );
+    assert_eq!(matchlist.matches("slash-a", None), Ok(None));
     assert_eq!(
         matchlist.matches("/slash-a", None),
-        Some(MatchType::Include)
+        Ok(Some(MatchType::Include))
     );
 
     assert_eq!(
         matchlist.matches("foo/noslash", None),
-        Some(MatchType::Include)
+        Ok(Some(MatchType::Include))
     );
-    assert_eq!(matchlist.matches("foo/noslash-a", None), None);
-    assert_eq!(matchlist.matches("foo/slash", None), None);
-    assert_eq!(matchlist.matches("foo/slash-a", None), None);
+    assert_eq!(matchlist.matches("foo/noslash-a", None), Ok(None));
+    assert_eq!(matchlist.matches("foo/slash", None), Ok(None));
+    assert_eq!(matchlist.matches("foo/slash-a", None), Ok(None));
+}
+
+#[test]
+fn matches_path() {
+    use crate::Pattern;
+
+    let matchlist = vec![
+        MatchEntry::new(Pattern::path("a*").unwrap(), MatchType::Exclude),
+        MatchEntry::new(Pattern::path("b*").unwrap(), MatchType::Exclude),
+    ];
+
+    assert_eq!(
+        matchlist.matches("ahsjdj", || Err(FileModeRequired {})),
+        Ok(Some(MatchType::Exclude))
+    );
+    let mut test = 1;
+    let result = matchlist.matches("bhshdf", || {
+        test += 1;
+        Ok::<u32, FileModeRequired>(libc::S_IFDIR)
+    });
+    assert_eq!(result, Ok(Some(MatchType::Exclude)));
+    assert_eq!(test, 1);
+
+    let matchlist = vec![
+        MatchEntry::new(Pattern::path("a*").unwrap(), MatchType::Exclude)
+            .flags(MatchFlag::MATCH_DIRECTORIES),
+        MatchEntry::new(Pattern::path("b*").unwrap(), MatchType::Exclude),
+    ];
+
+    let mut test = 1;
+    let result = matchlist.matches("aa", || {
+        test += 1;
+        Ok::<u32, FileModeRequired>(libc::S_IFDIR)
+    });
+    assert_eq!(result, Ok(Some(MatchType::Exclude)));
+    assert_eq!(test, 2);
+    assert_eq!(
+        matchlist.matches("ahsjdj", || Err(FileModeRequired {})),
+        Err(FileModeRequired {})
+    );
+    assert_eq!(
+        matchlist.matches("bhshdf", || Err(FileModeRequired {})),
+        Ok(Some(MatchType::Exclude))
+    );
+    assert_eq!(
+        matchlist.matches("ahsjdj", || Ok::<u32, FileModeRequired>(libc::S_IFREG)),
+        Ok(None)
+    );
+
+    let matchlist = vec![
+        MatchEntry::new(Pattern::path("b*").unwrap(), MatchType::Include),
+        MatchEntry::new(Pattern::path("a*").unwrap(), MatchType::Exclude)
+            .flags(MatchFlag::MATCH_DIRECTORIES),
+    ];
+    assert_eq!(
+        matchlist.matches("ahsjdj", || Err(FileModeRequired {})),
+        Err(FileModeRequired {})
+    );
+    assert_eq!(
+        matchlist.matches("bhshdf", || Err(FileModeRequired {})),
+        Err(FileModeRequired {})
+    );
+    assert_eq!(
+        matchlist.matches("ahsjdj", || Ok::<u32, FileModeRequired>(libc::S_IFDIR)),
+        Ok(Some(MatchType::Exclude))
+    );
+    assert_eq!(
+        matchlist.matches("ahsjdj", || Ok::<u32, FileModeRequired>(libc::S_IFREG)),
+        Ok(None)
+    );
+    assert_eq!(
+        matchlist.matches("bbb", || Ok::<u32, FileModeRequired>(libc::S_IFREG)),
+        Ok(Some(MatchType::Include))
+    );
+
+    let matchlist = vec![
+        MatchEntry::new(Pattern::path("a*").unwrap(), MatchType::Exclude)
+            .flags(MatchFlag::MATCH_DIRECTORIES),
+    ];
+
+    assert_eq!(
+        matchlist.matches("bbb", || Ok::<u32, FileModeRequired>(libc::S_IFDIR)),
+        Ok(None)
+    );
+
+    let matchlist = vec![
+        MatchEntry::new(Pattern::path("a*").unwrap(), MatchType::Exclude)
+            .flags(MatchFlag::MATCH_DIRECTORIES),
+        MatchEntry::new(Pattern::path("b*").unwrap(), MatchType::Exclude)
+            .flags(MatchFlag::MATCH_REGULAR_FILES),
+    ];
+
+    assert_eq!(
+        matchlist.matches("ahsjdj", || Ok::<u32, FileModeRequired>(libc::S_IFDIR)),
+        Ok(Some(MatchType::Exclude))
+    );
+    assert_eq!(
+        matchlist.matches("ahsjdj", || Ok::<u32, FileModeRequired>(libc::S_IFREG)),
+        Ok(None)
+    );
+    assert_eq!(
+        matchlist.matches("bhsjdj", || Ok::<u32, FileModeRequired>(libc::S_IFREG)),
+        Ok(Some(MatchType::Exclude))
+    );
+    assert_eq!(
+        matchlist.matches("bhsjdj", libc::S_IFREG as u32),
+        Ok(Some(MatchType::Exclude))
+    );
+    assert_eq!(matchlist.matches("bhsjdj", 0), Ok(None));
+}
+
+#[test]
+fn match_entry_needs_flag() {
+    use crate::Pattern;
+    let match_entry =
+        MatchEntry::parse_pattern("a*/", PatternFlag::PATH_NAME, MatchType::Exclude).unwrap();
+    assert_eq!(match_entry.needs_file_mode(), true);
+
+    let match_entry = MatchEntry::new(Pattern::path("a*").unwrap(), MatchType::Exclude)
+        .flags(MatchFlag::MATCH_REGULAR_FILES);
+    assert_eq!(match_entry.needs_file_mode(), true);
+
+    let match_entry = MatchEntry::new(Pattern::path("a*").unwrap(), MatchType::Exclude)
+        .flags(MatchFlag::MATCH_DIRECTORIES | MatchFlag::MATCH_REGULAR_FILES);
+    assert_eq!(match_entry.needs_file_mode(), true);
+
+    let match_entry = MatchEntry::new(Pattern::path("a*").unwrap(), MatchType::Exclude)
+        .flags(MatchFlag::ANCHORED | MatchFlag::MATCH_DIRECTORIES);
+    assert_eq!(match_entry.needs_file_mode(), true);
+
+    let match_entry = MatchEntry::new(Pattern::path("a*").unwrap(), MatchType::Exclude)
+        .flags(MatchFlag::ANY_FILE_TYPE);
+    assert_eq!(match_entry.needs_file_mode(), false);
 }
