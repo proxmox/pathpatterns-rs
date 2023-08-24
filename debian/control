@@ -26,10 +26,10 @@ Provides:
  librust-pathpatterns+default-dev (= ${binary:Version}),
  librust-pathpatterns-0-dev (= ${binary:Version}),
  librust-pathpatterns-0+default-dev (= ${binary:Version}),
- librust-pathpatterns-0.1-dev (= ${binary:Version}),
- librust-pathpatterns-0.1+default-dev (= ${binary:Version}),
- librust-pathpatterns-0.1.3-dev (= ${binary:Version}),
- librust-pathpatterns-0.1.3+default-dev (= ${binary:Version})
+ librust-pathpatterns-0.2-dev (= ${binary:Version}),
+ librust-pathpatterns-0.2+default-dev (= ${binary:Version}),
+ librust-pathpatterns-0.2.0-dev (= ${binary:Version}),
+ librust-pathpatterns-0.2.0+default-dev (= ${binary:Version})
 Description: Include/exclude path list implementation with git-like globbing support - Rust source code
  This package contains the source for the Rust pathpatterns crate, packaged by
  debcargo for use with cargo and dh-cargo.
