@@ -43,7 +43,7 @@ pub struct FileModeRequired;
 
 impl std::fmt::Display for FileModeRequired {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "File mode is required for matching")
+        f.write_str("file mode is required for matching")
     }
 }
 
@@ -67,7 +67,7 @@ where
 impl GetFileMode for Option<u32> {
     type Error = FileModeRequired;
     fn get(self) -> Result<u32, Self::Error> {
-        self.ok_or(FileModeRequired {})
+        self.ok_or(FileModeRequired)
     }
 }
 
@@ -346,10 +346,7 @@ impl MatchEntry {
 
     pub fn needs_file_mode(&self) -> bool {
         let flags = (self.flags & MatchFlag::ANY_FILE_TYPE).bits();
-        if flags != 0 && flags != MatchFlag::ANY_FILE_TYPE.bits() {
-            return true;
-        }
-        false
+        flags != 0 && flags != MatchFlag::ANY_FILE_TYPE.bits()
     }
 }
 
@@ -629,7 +626,7 @@ fn matches_path() {
     ];
 
     assert_eq!(
-        matchlist.matches("ahsjdj", || Err(FileModeRequired {})),
+        matchlist.matches("ahsjdj", || Err(FileModeRequired)),
         Ok(Some(MatchType::Exclude))
     );
     let mut test = 1;
@@ -654,11 +651,11 @@ fn matches_path() {
     assert_eq!(result, Ok(Some(MatchType::Exclude)));
     assert_eq!(test, 2);
     assert_eq!(
-        matchlist.matches("ahsjdj", || Err(FileModeRequired {})),
-        Err(FileModeRequired {})
+        matchlist.matches("ahsjdj", || Err(FileModeRequired)),
+        Err(FileModeRequired)
     );
     assert_eq!(
-        matchlist.matches("bhshdf", || Err(FileModeRequired {})),
+        matchlist.matches("bhshdf", || Err(FileModeRequired)),
         Ok(Some(MatchType::Exclude))
     );
     assert_eq!(
@@ -672,12 +669,12 @@ fn matches_path() {
             .flags(MatchFlag::MATCH_DIRECTORIES),
     ];
     assert_eq!(
-        matchlist.matches("ahsjdj", || Err(FileModeRequired {})),
-        Err(FileModeRequired {})
+        matchlist.matches("ahsjdj", || Err(FileModeRequired)),
+        Err(FileModeRequired)
     );
     assert_eq!(
-        matchlist.matches("bhshdf", || Err(FileModeRequired {})),
-        Err(FileModeRequired {})
+        matchlist.matches("bhshdf", || Err(FileModeRequired)),
+        Err(FileModeRequired)
     );
     assert_eq!(
         matchlist.matches("ahsjdj", || Ok::<u32, FileModeRequired>(libc::S_IFDIR)),
