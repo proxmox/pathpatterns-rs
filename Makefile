@@ -18,7 +18,6 @@ check:
 dinstall: deb
 	sudo -k dpkg -i build/librust-*.deb
 
-.PHONY: build
 build:
 	rm -rf build
 	rm debian/control
@@ -36,14 +35,18 @@ build:
 	cp build/pathpatterns/debian/control debian/control
 
 .PHONY: deb
-deb: build build/$(DEB)
-build/$(DEB): | build
+deb:
+	rm -rf build
+	$(MAKE) build/$(DEB)
+build/$(DEB): build
 	(cd build/pathpatterns && CARGO=/usr/bin/cargo RUSTC=/usr/bin/rustc dpkg-buildpackage -b -uc -us)
 	lintian build/*.deb
 
 .PHONY: dsc
-dsc: build build/$(DSC)
-build/$(DSC): | build
+dsc:
+	rm -rf build
+	$(MAKE) build/$(DSC)
+build/$(DSC): build
 	(cd build/pathpatterns && CARGO=/usr/bin/cargo RUSTC=/usr/bin/rustc dpkg-buildpackage -S -uc -us)
 	lintian build/*.dsc
 
