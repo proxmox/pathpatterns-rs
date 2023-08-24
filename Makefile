@@ -31,9 +31,14 @@ deb: build
 	(cd build/pathpatterns && CARGO=/usr/bin/cargo RUSTC=/usr/bin/rustc dpkg-buildpackage -b -uc -us)
 	lintian build/*.deb
 
+.PHONY: dsc
+dsc: build
+	(cd build/pathpatterns && CARGO=/usr/bin/cargo RUSTC=/usr/bin/rustc dpkg-buildpackage -S -uc -us)
+	lintian build/*.dsc
+
 .PHONY: clean
 clean:
-	rm -rf build *.deb *.buildinfo *.changes *.orig.tar.gz
+	rm -rf build *.deb *.dsc *.buildinfo *.changes *.orig.tar.gz
 	cargo clean
 
 upload: deb
