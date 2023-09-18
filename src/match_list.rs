@@ -412,41 +412,42 @@ impl MatchListEntry for &'_ &'_ MatchEntry {
 /// [`VecDeque`](std::collections::VecDeque) etc.
 ///
 /// This makes it easier to use slices over entries or references to entries.
-pub trait MatchList {
+pub trait MatchList<'a> {
     /// Check whether this list contains anything matching a prefix of the specified path, and the
     /// specified file mode. Gets the file_mode lazily, only if needed.
-    fn matches<P, U>(&self, path: P, get_file_mode: U) -> Result<Option<MatchType>, U::Error>
+    fn matches<P, U>(&'a self, path: P, get_file_mode: U) -> Result<Option<MatchType>, U::Error>
     where
         P: AsRef<[u8]>,
         U: GetFileMode;
 
     /// Check whether this list contains anything exactly matching the path and mode. Gets the
     /// file_mode lazily, only if needed.
-    fn matches_exact<P, U>(&self, path: P, get_file_mode: U) -> Result<Option<MatchType>, U::Error>
+    fn matches_exact<P, U>(
+        &'a self,
+        path: P,
+        get_file_mode: U,
+    ) -> Result<Option<MatchType>, U::Error>
     where
         P: AsRef<[u8]>,
         U: GetFileMode;
 }
 
-impl<'a, T> MatchList for T
+impl<'a, T> MatchList<'a> for T
 where
     T: 'a + ?Sized,
     &'a T: IntoIterator,
     <&'a T as IntoIterator>::IntoIter: DoubleEndedIterator,
     <&'a T as IntoIterator>::Item: MatchListEntry,
 {
-    fn matches<P, G>(&self, path: P, get_file_mode: G) -> Result<Option<MatchType>, G::Error>
+    fn matches<P, G>(&'a self, path: P, get_file_mode: G) -> Result<Option<MatchType>, G::Error>
     where
         P: AsRef<[u8]>,
         G: GetFileMode,
     {
-        // This is an &self method on a `T where T: 'a`.
-        let this: &'a Self = unsafe { std::mem::transmute(self) };
-
         let mut get_file_mode = Some(get_file_mode);
         let mut file_mode = None;
 
-        for m in this.into_iter().rev() {
+        for m in self.into_iter().rev() {
             if file_mode.is_none() && m.entry_needs_file_mode() {
                 file_mode = Some(get_file_mode.take().unwrap().get()?);
             }
@@ -457,18 +458,19 @@ where
         Ok(None)
     }
 
-    fn matches_exact<P, G>(&self, path: P, get_file_mode: G) -> Result<Option<MatchType>, G::Error>
+    fn matches_exact<P, G>(
+        &'a self,
+        path: P,
+        get_file_mode: G,
+    ) -> Result<Option<MatchType>, G::Error>
     where
         P: AsRef<[u8]>,
         G: GetFileMode,
     {
-        // This is an &self method on a `T where T: 'a`.
-        let this: &'a Self = unsafe { std::mem::transmute(self) };
-
         let mut get_file_mode = Some(get_file_mode);
         let mut file_mode = None;
 
-        for m in this.into_iter().rev() {
+        for m in self.into_iter().rev() {
             if file_mode.is_none() && m.entry_needs_file_mode() {
                 file_mode = Some(get_file_mode.take().unwrap().get()?);
             }
