@@ -1,3 +1,9 @@
+rust-pathpatterns (0.3.0-1) bookworm; urgency=medium
+
+  * add lifetime to MatchList to drop some unsafe blocks
+
+ -- Proxmox Support Team <support@proxmox.com>  Thu, 19 Oct 2023 11:10:21 +0200
+
 rust-pathpatterns (0.2.0-1) bookworm; urgency=medium
 
   * MatchList functions now take a parameter to possibly lazily fetch the file
