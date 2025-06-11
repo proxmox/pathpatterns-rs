@@ -6,6 +6,7 @@ use crate::PatternFlag;
 #[rustfmt::skip]
 bitflags! {
     /// These flags influence what kind of paths should be matched.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct MatchFlag: u16 {
         /// Match only a complete entry. The pattern `bar` will not match `/foo/bar`.
         const ANCHORED            = 0x00_01;

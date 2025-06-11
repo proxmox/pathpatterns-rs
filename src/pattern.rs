@@ -75,6 +75,7 @@ impl Component {
 
 bitflags! {
     /// Flags affecting how a pattern should match.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct PatternFlag: u8 {
         /// Ignore upper/lower case on the pattern. Note that this only affects ascii characters.
         /// We do not normalize/casefold unicode here. If you need this, case-fold your input
