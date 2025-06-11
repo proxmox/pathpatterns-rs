@@ -1,15 +1,15 @@
 Source: rust-pathpatterns
 Section: rust
 Priority: optional
-Build-Depends: debhelper (>= 12),
- dh-cargo (>= 25),
- cargo:native <!nocheck>,
+Build-Depends: debhelper-compat (= 13),
+ dh-sequence-cargo
+Build-Depends-Arch: cargo:native <!nocheck>,
  rustc:native <!nocheck>,
  libstd-rust-dev <!nocheck>,
- librust-bitflags-1+default-dev (>= 1.2-~~) <!nocheck>,
+ librust-bitflags-2+default-dev <!nocheck>,
  librust-libc-0.2+default-dev <!nocheck>
 Maintainer: Proxmox Support Team <support@proxmox.com>
-Standards-Version: 4.6.1
+Standards-Version: 4.7.0
 Vcs-Git: 
 Vcs-Browser: 
 X-Cargo-Crate: pathpatterns
@@ -20,16 +20,15 @@ Architecture: any
 Multi-Arch: same
 Depends:
  ${misc:Depends},
- librust-bitflags-1+default-dev (>= 1.2-~~),
+ librust-bitflags-2+default-dev,
  librust-libc-0.2+default-dev
 Provides:
  librust-pathpatterns+default-dev (= ${binary:Version}),
- librust-pathpatterns-0-dev (= ${binary:Version}),
- librust-pathpatterns-0+default-dev (= ${binary:Version}),
- librust-pathpatterns-0.3-dev (= ${binary:Version}),
- librust-pathpatterns-0.3+default-dev (= ${binary:Version}),
- librust-pathpatterns-0.3.0-dev (= ${binary:Version}),
- librust-pathpatterns-0.3.0+default-dev (= ${binary:Version})
+ librust-pathpatterns-1-dev (= ${binary:Version}),
+ librust-pathpatterns-1+default-dev (= ${binary:Version}),
+ librust-pathpatterns-1.0-dev (= ${binary:Version}),
+ librust-pathpatterns-1.0+default-dev (= ${binary:Version}),
+ librust-pathpatterns-1.0.0-dev (= ${binary:Version}),
+ librust-pathpatterns-1.0.0+default-dev (= ${binary:Version})
 Description: Include/exclude path list implementation with git-like globbing support - Rust source code
- This package contains the source for the Rust pathpatterns crate, packaged by
- debcargo for use with cargo and dh-cargo.
+ Source code for Debianized Rust crate "pathpatterns"

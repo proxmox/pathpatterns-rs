@@ -1,6 +1,6 @@
 [package]
 name = "pathpatterns"
-version = "0.3.0"
+version = "1.0.0"
 authors = ["Wolfgang Bumiller <w.bumiller@errno.eu>"]
 edition = "2024"
 license = "AGPL-3.0-or-later"
