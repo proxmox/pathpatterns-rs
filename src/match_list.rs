@@ -405,11 +405,10 @@ impl MatchListEntry for &'_ &'_ MatchEntry {
 /// This provides [`matches`](MatchList::matches) and [`matches_exact`](MatchList::matches_exact)
 /// methods to lists of [`MatchEntry`] items.
 ///
-/// Technically this is implemented for anything that you can turn into a
-/// [`DoubleEndedIterator`](std::iter::DoubleEndedIterator) over [`MatchEntry`] or
-/// [`&MatchEntry`](MatchEntry).
+/// Technically this is implemented for anything that you can turn into a [`DoubleEndedIterator`]
+/// over [`MatchEntry`] or [`&MatchEntry`](MatchEntry).
 ///
-/// In practice this means you can use it with slices or references to [`Vec`](std::vec::Vec) or
+/// In practice this means you can use it with slices or references to [`Vec`] or
 /// [`VecDeque`](std::collections::VecDeque) etc.
 ///
 /// This makes it easier to use slices over entries or references to entries.
